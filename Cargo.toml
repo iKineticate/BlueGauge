@@ -1,0 +1,20 @@
+[package]
+name = "BlueGauge"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+
+[dependencies.windows]
+version = "0.58.0"
+features = [
+    "Devices_Bluetooth",
+    "Devices_Bluetooth_GenericAttributeProfile",
+    "Devices_Enumeration",
+    "Foundation_Collections",
+    "Storage_Streams",
+]
+
+[profile.release]
+lto = true
+codegen-units = 1
