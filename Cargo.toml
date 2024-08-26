@@ -4,6 +4,10 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+tray-icon = "0.15.1"
+image = "0.25"
+tao = "0.28"
+tokio = { version = "1", features = ["sync", "rt-multi-thread"] }
 
 [dependencies.windows]
 version = "0.58.0"
@@ -14,6 +18,9 @@ features = [
     "Foundation_Collections",
     "Storage_Streams",
 ]
+
+[build-dependencies]
+embed-resource = "2.4"
 
 [profile.release]
 lto = true

@@ -1,4 +1,8 @@
 #![allow(non_snake_case)]
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
+mod systray;
+use crate::systray::show_systray;
 
 use windows::{
     Devices::Bluetooth::{BluetoothLEDevice, BluetoothConnectionStatus},
@@ -7,23 +11,10 @@ use windows::{
     Storage::Streams::DataReader,
     core::GUID,
 };
+use tray_icon::menu::{Menu, MenuItem, PredefinedMenuItem};
 
 fn main() -> windows::core::Result<()> {
-    let devices = find_bluetooth_devices()?;
-
-    for device in devices {
-        if let Ok(le_device) = BluetoothLEDevice::FromIdAsync(&device.Id()?)?.get() {
-            if le_device.ConnectionStatus()? == BluetoothConnectionStatus::Connected {
-                println!("Found device: {}", device.Name()?);
-
-                if let Ok(battery_level) = get_battery_level(&le_device) {
-                    println!("Battery level: {}%", battery_level);
-                } else {
-                    println!("Battery level: Not available");
-                }
-            }
-        }
-    }
+    let _ = show_systray();
 
     Ok(())
 }
@@ -69,4 +60,36 @@ fn get_battery_level(device: &BluetoothLEDevice) -> windows::core::Result<u8> {
     }
 
     Err(windows::core::Error::from_win32())
+}
+
+fn get_bluetooth_info(devices: Vec<DeviceInformation>) -> windows::core::Result<(Vec<String>, Menu)> {
+    let menu = Menu::new();
+    let mut tooltip: Vec<String> = Vec::new();
+
+    for device in devices {
+        if let Ok(le_device) = BluetoothLEDevice::FromIdAsync(&device.Id()?)?.get() {
+            let status = le_device.ConnectionStatus().expect("Failed to get link status");
+
+            let battery_level = match get_battery_level(&le_device) {
+                Ok(level) => level.to_string(),
+                Err(_) => "None".to_string(),
+            };
+
+            if status == BluetoothConnectionStatus::Connected {
+                let menu_text = format!("✅ {} - {}%", device.Name().unwrap(), battery_level);
+                let tooltip_text = format!("🟢 {} - {}%", device.Name().unwrap(), battery_level);
+                menu.prepend(&MenuItem::new(menu_text, true, None)).unwrap();
+                tooltip.insert(0, tooltip_text);
+            } else {
+                let menu_text = format!("❎ {} - {}%", device.Name().unwrap(), battery_level);
+                let tooltip_text = format!("🔴 {} - {}%", device.Name().unwrap(), battery_level);
+                menu.append(&MenuItem::new(menu_text, true, None)).unwrap();
+                tooltip.push(tooltip_text);
+            };
+        }
+    };
+
+    menu.append(&PredefinedMenuItem::separator()).unwrap();
+
+    Ok((tooltip, menu))
 }
