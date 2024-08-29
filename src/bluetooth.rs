@@ -7,26 +7,11 @@ use windows::{
 };
 
 pub fn find_bluetooth_devices() -> windows::core::Result<Vec<DeviceInformation>> {
-    let devices = 
-        windows::Devices::Enumeration::DeviceInformation::FindAllAsync()?.get()?;
+    let bt_le_aqs_filter = BluetoothLEDevice::GetDeviceSelector().unwrap();
 
-    let mut discovered_devices = Vec::new();
+    let devices = DeviceInformation::FindAllAsyncAqsFilter(&bt_le_aqs_filter)?.get()?;
 
-    Ok(devices
-        .into_iter()
-        .filter_map(|device| {
-            device.Name().ok().and_then(|n| {
-                let name = n.to_string();
-                if discovered_devices.contains(&name) {
-                    None
-                } else {
-                    discovered_devices.push(name);
-                    Some(device)
-                }
-            })
-        })
-        .collect()
-    )
+    Ok(devices.into_iter().collect())
 }
 
 pub fn get_battery_level(device: &BluetoothLEDevice) -> windows::core::Result<u8> {
@@ -55,6 +40,8 @@ pub fn get_bluetooth_info(devices: Vec<DeviceInformation>) -> windows::core::Res
 
     for device in devices {
         if let Ok(le_device) = BluetoothLEDevice::FromIdAsync(&device.Id()?)?.get() {
+            let device_name = device.Name()?.to_string();
+
             let status = le_device.ConnectionStatus().expect("Failed to get link status");
 
             let battery_level = match get_battery_level(&le_device) {
@@ -63,13 +50,14 @@ pub fn get_bluetooth_info(devices: Vec<DeviceInformation>) -> windows::core::Res
             };
 
             if status == BluetoothConnectionStatus::Connected {
-                let menu_text = format!("√ {} - {}%", device.Name().unwrap(), battery_level);
-                let tooltip_text = format!("🟢 {} - {}%", device.Name().unwrap(), battery_level);
+                let menu_text = format!("🔗 {} - {}%", &device_name, battery_level);
+                let tooltip_text = format!("🟢 {} - {}%", &device_name, battery_level);
                 menu_items.insert(0, menu_text);
                 tooltip.insert(0, tooltip_text);
+                // println!("{:?}", device.Properties()?)
             } else {
-                let menu_text = format!("× {} - {}%", device.Name().unwrap(), battery_level);
-                let tooltip_text = format!("🔴 {} - {}%", device.Name().unwrap(), battery_level);
+                let menu_text = format!("     {} - {}%", &device_name, battery_level);
+                let tooltip_text = format!("🔴 {} - {}%", &device_name, battery_level);
                 menu_items.push(menu_text);
                 tooltip.push(tooltip_text);
             };

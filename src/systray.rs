@@ -1,7 +1,7 @@
 use tao::event_loop::{ControlFlow, EventLoopBuilder};
 use tao::platform::run_return::EventLoopExtRunReturn;
 use tray_icon::menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem};
-use tray_icon::TrayIconBuilder;
+use tray_icon::TrayIconBuilder;    // TrayIconEvent
 use image;
 
 use crate::bluetooth::{find_bluetooth_devices, get_bluetooth_info};
@@ -50,6 +50,7 @@ fn loop_systray() -> windows::core::Result<()> {
         .unwrap();
 
     let menu_channel = MenuEvent::receiver();
+    // let tray_channel = TrayIconEvent::receiver();
 
     {
         let devices_clone = devices.clone();
@@ -85,16 +86,23 @@ fn loop_systray() -> windows::core::Result<()> {
             if menu_event.id == menu_quit.id()  {
                 println!("process exist");
                 *control_flow = ControlFlow::Exit;
-            }
-        }
+            };
+        };
+
+        // if let Ok(tray_event) = tray_channel.try_recv() {
+        //     if tray_event.id() == tray_icon.id() {
+        //         return
+        //     };
+        // };
 
         if event == tao::event::Event::UserEvent(()) {
             println!("update tooltip and menu");
             let tray_menu = Menu::new();
-            let tooltip_lock = tooltip.lock().unwrap();
-            let menu_items_2 = menu_items.lock().unwrap();
 
-            menu_items_2.iter().for_each(|i| {
+            let tooltip_lock = tooltip.lock().unwrap();
+            let menu_items_lock = menu_items.lock().unwrap();
+
+            menu_items_lock.iter().for_each(|i| {
                 let item = MenuItem::new(i, true, None);
                 tray_menu.append(&item).unwrap();
             });
@@ -103,12 +111,12 @@ fn loop_systray() -> windows::core::Result<()> {
 
             tray_icon.set_tooltip(Some(tooltip_lock.join("\n"))).unwrap();
             tray_icon.set_menu(Some(Box::new(tray_menu)));
-        }
+        };
     });
 
     if return_code != 0 {
         std::process::exit(return_code);
-    }
+    };
 
     Ok(())
 }
