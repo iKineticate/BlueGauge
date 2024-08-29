@@ -1,7 +1,7 @@
 # BlueGauge
 A lightweight tray tool for easily checking the battery level of your Bluetooth LE devices.
 
-一款轻便的托盘工具，可轻松检查低功耗蓝牙设备的电池电量。
+一款轻便的托盘工具，可轻松查看低功耗蓝牙设备的电池电量。
 
 ![image](https://raw.githubusercontent.com/iKineticate/BlueGauge/main/screenshots/app.png)
 

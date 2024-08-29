@@ -4,7 +4,7 @@ use tray_icon::menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem};
 use tray_icon::TrayIconBuilder;    // TrayIconEvent
 use image;
 
-use crate::bluetooth::{find_bluetooth_devices, get_bluetooth_info};
+use crate::bluetooth::{find_bluetooth_le_devices, get_bluetooth_info};
 
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -25,9 +25,8 @@ fn loop_systray() -> windows::core::Result<()> {
     let menu_separator = PredefinedMenuItem::separator();
     let menu_quit = MenuItem::new("Quit", true, None);
 
-    let devices = find_bluetooth_devices()?;
-
-    let (t, m) = get_bluetooth_info(devices.clone()).unwrap();
+    let devices = find_bluetooth_le_devices()?;
+    let (t, m) = get_bluetooth_info(devices).unwrap();
     let tooltip = Arc::new(Mutex::new(t));
     let menu_items = Arc::new(Mutex::new(m));
 
@@ -53,18 +52,17 @@ fn loop_systray() -> windows::core::Result<()> {
     // let tray_channel = TrayIconEvent::receiver();
 
     {
-        let devices_clone = devices.clone();
         let tooltip_clone = Arc::clone(&tooltip);
         let menu_items_clone = Arc::clone(&menu_items);
 
         thread::spawn(move || {
             loop {
                 println!("thread: wait");
-                thread::sleep(std::time::Duration::from_millis(60000));
+                thread::sleep(std::time::Duration::from_secs(60));
                 println!("thread: running");
-                let devices_clone = devices_clone.clone();
+                let devices = find_bluetooth_le_devices().unwrap();
                 let (tooltip_result, menu_items_result) = 
-                    get_bluetooth_info(devices_clone).unwrap();
+                    get_bluetooth_info(devices).unwrap();
                 
                 match (tooltip_clone.try_lock(), menu_items_clone.try_lock()) {
                     (Ok(mut tooltip), Ok(mut menu_items)) => {

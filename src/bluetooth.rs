@@ -1,26 +1,27 @@
 use windows::{
     Devices::Bluetooth::{BluetoothLEDevice, BluetoothConnectionStatus},
-    Devices::Bluetooth::GenericAttributeProfile::GattCharacteristicUuids,
+    Devices::Bluetooth::GenericAttributeProfile::{GattServiceUuids, GattCharacteristicUuids},
     Devices::Enumeration::DeviceInformation,
     Storage::Streams::DataReader,
     core::GUID,
 };
 
-pub fn find_bluetooth_devices() -> windows::core::Result<Vec<DeviceInformation>> {
+pub fn find_bluetooth_le_devices() -> windows::core::Result<Vec<DeviceInformation>> {
     let bt_le_aqs_filter = BluetoothLEDevice::GetDeviceSelector().unwrap();
-
-    let devices = DeviceInformation::FindAllAsyncAqsFilter(&bt_le_aqs_filter)?.get()?;
-
-    Ok(devices.into_iter().collect())
+    let bt_le_devices = DeviceInformation::FindAllAsyncAqsFilter(&bt_le_aqs_filter)?.get()?;
+    Ok(bt_le_devices.into_iter().collect())
 }
 
 pub fn get_battery_level(device: &BluetoothLEDevice) -> windows::core::Result<u8> {
-    let services = device.GetGattServicesAsync()?.get()?.Services()?;
-
+    let battery_guid: GUID = GattServiceUuids::Battery()?;
     let battery_level_guid: GUID = GattCharacteristicUuids::BatteryLevel()?;
 
+    let services = 
+        device.GetGattServicesForUuidAsync(battery_guid)?.get()?.Services()?;
+
     for service in services {
-        let characteristics = service.GetCharacteristicsAsync()?.get()?.Characteristics()?;
+        let characteristics = 
+            service.GetCharacteristicsForUuidAsync(battery_level_guid)?.get()?.Characteristics()?;
 
         for characteristic in characteristics {
             if characteristic.Uuid()? == battery_level_guid {
