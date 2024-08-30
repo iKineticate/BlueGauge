@@ -1,12 +1,12 @@
+use image;
 use tao::event_loop::{ControlFlow, EventLoopBuilder};
 use tao::platform::run_return::EventLoopExtRunReturn;
 use tray_icon::menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem};
-use tray_icon::TrayIconBuilder;    // TrayIconEvent
-use image;
+use tray_icon::{TrayIcon, TrayIconBuilder}; // TrayIconEvent
 
-use crate::bluetooth::{find_bluetooth_le_devices, get_bluetooth_info};
+use crate::bluetooth::{find_bluetooth_le_devices, get_bluetooth_le_info, BlueInfo};
 
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread;
 
 const ICON_DATA: &[u8] = include_bytes!("../resources/logo.ico");
@@ -19,61 +19,53 @@ fn loop_systray() -> windows::core::Result<()> {
     let mut event_loop = EventLoopBuilder::new().build();
     let event_loop_proxy = event_loop.create_proxy();
 
-    let icon = load_icon();
+    let blues = find_bluetooth_le_devices()?;
+    let blues_info = get_bluetooth_le_info(blues)?;
 
-    let tray_menu = Menu::new();
+    let (tooltip, items) = get_tray_info(blues_info);
+    let tray_tooltip = Arc::new(Mutex::new(tooltip));
+    let menu_items = Arc::new(Mutex::new(items));
+
+    let mut tray_icon = TrayIconBuilder::new()
+        .with_icon(load_icon())
+        .build()
+        .unwrap();
+
     let menu_separator = PredefinedMenuItem::separator();
     let menu_quit = MenuItem::new("Quit", true, None);
 
-    let devices = find_bluetooth_le_devices()?;
-    let (t, m) = get_bluetooth_info(devices).unwrap();
-    let tooltip = Arc::new(Mutex::new(t));
-    let menu_items = Arc::new(Mutex::new(m));
-
-    {
-        let menu_items_lock = menu_items.lock().unwrap();
-        
-        menu_items_lock.iter().for_each(|i| {
-            let item = MenuItem::new(i, true, None);
-            tray_menu.append(&item).unwrap();
-        });
-        tray_menu.append(&menu_separator).unwrap();
-        tray_menu.append(&menu_quit).unwrap();
-    }
-    
-    let tray_icon = TrayIconBuilder::new()
-        .with_menu(Box::new(tray_menu))
-        .with_tooltip(tooltip.lock().unwrap().join("\n"))
-        .with_icon(icon)
-        .build()
-        .unwrap();
+    tray_icon = update_tray_info(
+        tray_icon.clone(),
+        &menu_quit,
+        &menu_separator,
+        tray_tooltip.lock().unwrap(),
+        menu_items.lock().unwrap(),
+    );
 
     let menu_channel = MenuEvent::receiver();
     // let tray_channel = TrayIconEvent::receiver();
 
     {
-        let tooltip_clone = Arc::clone(&tooltip);
+        let tray_tooltip_clone = Arc::clone(&tray_tooltip);
         let menu_items_clone = Arc::clone(&menu_items);
 
-        thread::spawn(move || {
-            loop {
-                println!("thread: wait");
-                thread::sleep(std::time::Duration::from_secs(60));
-                println!("thread: running");
-                let devices = find_bluetooth_le_devices().unwrap();
-                let (tooltip_result, menu_items_result) = 
-                    get_bluetooth_info(devices).unwrap();
-                
-                match (tooltip_clone.try_lock(), menu_items_clone.try_lock()) {
-                    (Ok(mut tooltip), Ok(mut menu_items)) => {
-                        *tooltip = tooltip_result;
-                        *menu_items = menu_items_result.clone();
-                        println!("thread: update");
-                        event_loop_proxy.send_event(()).ok();
-                    },
-                    _ => println!("thread: locked"),
-                };                
-            }
+        thread::spawn(move || loop {
+            println!("thread: wait");
+            thread::sleep(std::time::Duration::from_secs(30));
+            println!("thread: running");
+            let blues = find_bluetooth_le_devices().unwrap();
+            let blues_info = get_bluetooth_le_info(blues).unwrap();
+            let (tooltip, items) = get_tray_info(blues_info);
+
+            match (tray_tooltip_clone.try_lock(), menu_items_clone.try_lock()) {
+                (Ok(mut tray_tooltip), Ok(mut menu_items)) => {
+                    *tray_tooltip = tooltip;
+                    *menu_items = items;
+                    println!("thread: update");
+                    event_loop_proxy.send_event(()).ok();
+                }
+                _ => println!("thread: locked"),
+            };
         });
     }
 
@@ -81,7 +73,7 @@ fn loop_systray() -> windows::core::Result<()> {
         *control_flow = ControlFlow::Wait;
 
         if let Ok(menu_event) = menu_channel.try_recv() {
-            if menu_event.id == menu_quit.id()  {
+            if menu_event.id == menu_quit.id() {
                 println!("process exist");
                 *control_flow = ControlFlow::Exit;
             };
@@ -94,21 +86,14 @@ fn loop_systray() -> windows::core::Result<()> {
         // };
 
         if event == tao::event::Event::UserEvent(()) {
-            println!("update tooltip and menu");
-            let tray_menu = Menu::new();
-
-            let tooltip_lock = tooltip.lock().unwrap();
-            let menu_items_lock = menu_items.lock().unwrap();
-
-            menu_items_lock.iter().for_each(|i| {
-                let item = MenuItem::new(i, true, None);
-                tray_menu.append(&item).unwrap();
-            });
-            tray_menu.append(&menu_separator).unwrap();
-            tray_menu.append(&menu_quit).unwrap();
-
-            tray_icon.set_tooltip(Some(tooltip_lock.join("\n"))).unwrap();
-            tray_icon.set_menu(Some(Box::new(tray_menu)));
+            println!("Update tray information");
+            tray_icon = update_tray_info(
+                tray_icon.clone(),
+                &menu_quit,
+                &menu_separator,
+                tray_tooltip.lock().unwrap(),
+                menu_items.lock().unwrap(),
+            );
         };
     });
 
@@ -128,6 +113,48 @@ fn load_icon() -> tray_icon::Icon {
         let rgba = image.into_raw();
         (rgba, width, height)
     };
-    tray_icon::Icon::from_rgba(icon_rgba, icon_width, icon_height)
-        .expect("Failed to open icon")
+    tray_icon::Icon::from_rgba(icon_rgba, icon_width, icon_height).expect("Failed to open icon")
+}
+
+fn get_tray_info(blues_info: Vec<BlueInfo>) -> (Vec<String>, Vec<String>) {
+    let mut tray_tooltip_result = Vec::new();
+    let mut menu_items_result = Vec::new();
+    for blue_info in blues_info {
+        match blue_info.status {
+            true => {
+                tray_tooltip_result
+                    .insert(0, format!("🟢 {} - {}%", blue_info.name, blue_info.battery));
+                menu_items_result
+                    .insert(0, format!("🔗 {} - {}%", blue_info.name, blue_info.battery))
+            }
+            false => {
+                tray_tooltip_result.push(format!("🔴 {} - {}%", blue_info.name, blue_info.battery));
+                menu_items_result.push(format!("     {} - {}%", blue_info.name, blue_info.battery))
+            }
+        }
+    }
+    (tray_tooltip_result, menu_items_result)
+}
+
+fn update_tray_info(
+    tray_icon: TrayIcon,
+    menu_quit: &MenuItem,
+    menu_separator: &PredefinedMenuItem,
+    tray_tooltip_lock: MutexGuard<Vec<String>>,
+    menu_items_lock: MutexGuard<Vec<String>>,
+) -> TrayIcon {
+    let tray_menu = Menu::new();
+    menu_items_lock.iter().for_each(|i| {
+        let item = MenuItem::new(i, true, None);
+        tray_menu.append(&item).unwrap();
+    });
+    tray_menu.append(menu_separator).unwrap();
+    tray_menu.append(menu_quit).unwrap();
+
+    tray_icon
+        .set_tooltip(Some(tray_tooltip_lock.join("\n")))
+        .unwrap();
+    tray_icon.set_menu(Some(Box::new(tray_menu)));
+
+    tray_icon
 }
