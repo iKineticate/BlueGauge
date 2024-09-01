@@ -6,7 +6,7 @@ use windows::{
     Storage::Streams::DataReader,
 };
 
-pub struct BlueInfo {
+pub struct BLEInfo {
     pub name: String,
     pub battery: u8,
     pub status: bool,
@@ -14,48 +14,52 @@ pub struct BlueInfo {
 
 pub fn find_bluetooth_le_devices() -> windows::core::Result<Vec<DeviceInformation>> {
     let bt_le_aqs_filter = BluetoothLEDevice::GetDeviceSelector().unwrap();
-    let devices_info = DeviceInformation::FindAllAsyncAqsFilter(&bt_le_aqs_filter)?.get()?;
-    Ok(devices_info.into_iter().collect())
+    let bt_le_devices_info = DeviceInformation::FindAllAsyncAqsFilter(&bt_le_aqs_filter)?.get()?;
+    Ok(bt_le_devices_info.into_iter().collect())
 }
 
-pub fn get_battery_level(device: &BluetoothLEDevice) -> windows::core::Result<u8> {
-    let battery_guid: GUID = GattServiceUuids::Battery()?;
-    let battery_level_guid: GUID = GattCharacteristicUuids::BatteryLevel()?;
+pub fn get_battery_level(bt_le_device: &BluetoothLEDevice) -> windows::core::Result<u8> {
+    let battery_services_uuid: GUID = GattServiceUuids::Battery()?;
+    let battery_level_uuid: GUID = GattCharacteristicUuids::BatteryLevel()?;
 
-    let services = device
-        .GetGattServicesForUuidAsync(battery_guid)?
-        .get()?
-        .Services()?;
+    let services = bt_le_device
+        .GetGattServicesForUuidAsync(battery_services_uuid)
+        .and_then(|gatt_services_result| gatt_services_result.get())
+        .and_then(|gatt_services| gatt_services.Services())?;
 
-    for service in services {
-        let battery_level = service
-            .GetCharacteristicsForUuidAsync(battery_level_guid)
-            .and_then(|op_gatt_chars_result| op_gatt_chars_result.get())
-            .and_then(|gatt_chars_result| gatt_chars_result.Characteristics())
-            .and_then(|gatt_chars| {
-                for gatt_char in gatt_chars {
-                    if gatt_char.Uuid()? == battery_level_guid {
-                        let result = gatt_char.ReadValueAsync()?.get()?;
-                        let reader = DataReader::FromBuffer(&result.Value()?);
-                        return Ok(reader?.ReadByte()?);
-                    }
-                }
-                Err(Error::from_win32())
-            });
-        if battery_level.is_ok() {
-            return battery_level;
-        };
-    }
-    Err(Error::from_win32())
+    let service = services
+        .into_iter()
+        .next()
+        .ok_or_else(|| Error::empty())?;
+
+    let gatt_chars = service
+        .GetCharacteristicsForUuidAsync(battery_level_uuid)
+        .and_then(|op_gatt_chars_result| op_gatt_chars_result.get())
+        .and_then(|gatt_chars_result| gatt_chars_result.Characteristics())?;
+
+    let gatt_char = gatt_chars
+        .into_iter()
+        .next()
+        .ok_or_else(|| Error::empty())?;
+
+    let battery_level = if gatt_char.Uuid()? == battery_level_uuid {
+        let result = gatt_char.ReadValueAsync()?.get()?;
+        let reader = DataReader::FromBuffer(&result.Value()?);
+        Ok(reader?.ReadByte()?)
+    } else {
+        Err(Error::empty())
+    };
+
+    return battery_level;
 }
 
 pub fn get_bluetooth_le_info(
-    devices_info: Vec<DeviceInformation>,
-) -> windows::core::Result<Vec<BlueInfo>> {
-    let mut info = Vec::<BlueInfo>::new();
+    bt_le_devices_info: Vec<DeviceInformation>,
+) -> windows::core::Result<Vec<BLEInfo>> {
+    let mut info = Vec::<BLEInfo>::new();
 
-    for device_info in devices_info {
-        if let Ok(bt_le_device) = BluetoothLEDevice::FromIdAsync(&device_info.Id()?)?.get() {
+    for bt_le_device_info in bt_le_devices_info {
+        if let Ok(bt_le_device) = BluetoothLEDevice::FromIdAsync(&bt_le_device_info.Id()?)?.get() {
             let name = bt_le_device.Name()?.to_string();
 
             let battery = get_battery_level(&bt_le_device).unwrap_or(0);
@@ -68,7 +72,7 @@ pub fn get_bluetooth_le_info(
                 _ => false,
             };
 
-            info.push(BlueInfo {
+            info.push(BLEInfo {
                 name,
                 battery,
                 status,

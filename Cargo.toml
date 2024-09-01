@@ -13,7 +13,10 @@ version = "0.58.0"
 features = [
     "Devices_Bluetooth",
     "Devices_Bluetooth_GenericAttributeProfile",
+    # Devices_Bluetooth_Advertisement,
+    # Devices_Radios,
     "Devices_Enumeration",
+    # Foundation,
     "Foundation_Collections",
     "Storage_Streams",
 ]

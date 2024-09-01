@@ -4,7 +4,7 @@ use tao::platform::run_return::EventLoopExtRunReturn;
 use tray_icon::menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem};
 use tray_icon::{TrayIcon, TrayIconBuilder}; // TrayIconEvent
 
-use crate::bluetooth::{find_bluetooth_le_devices, get_bluetooth_le_info, BlueInfo};
+use crate::bluetooth::{find_bluetooth_le_devices, get_bluetooth_le_info, BLEInfo};
 
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread;
@@ -116,7 +116,7 @@ fn load_icon() -> tray_icon::Icon {
     tray_icon::Icon::from_rgba(icon_rgba, icon_width, icon_height).expect("Failed to open icon")
 }
 
-fn get_tray_info(blues_info: Vec<BlueInfo>) -> (Vec<String>, Vec<String>) {
+fn get_tray_info(blues_info: Vec<BLEInfo>) -> (Vec<String>, Vec<String>) {
     let mut tray_tooltip_result = Vec::new();
     let mut menu_items_result = Vec::new();
     for blue_info in blues_info {
