@@ -5,8 +5,8 @@ mod bluetooth;
 mod systray;
 use crate::systray::show_systray;
 
-fn main() -> windows::core::Result<()> {
-    show_systray().unwrap();
-
-    Ok(())
+fn main() {
+    if let Err(_err) = show_systray() {
+        () // windows_toast_notify
+    }
 }
