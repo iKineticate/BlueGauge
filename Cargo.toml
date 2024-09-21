@@ -4,21 +4,27 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-tray-icon = "0.16.0"
+tray-icon = "0.17"
 image = "0.25"
-tao = "0.28"
+tao = "0.30"
+win-toast-notify = "0.1.6"
+scalefs_windowspnp = { path = "libs/scalefs_windowspnp" }
 
 [dependencies.windows]
 version = "0.58.0"
 features = [
     "Devices_Bluetooth",
     "Devices_Bluetooth_GenericAttributeProfile",
-    # Devices_Bluetooth_Advertisement,
-    # Devices_Radios,
     "Devices_Enumeration",
-    # Foundation,
     "Foundation_Collections",
     "Storage_Streams",
+]
+
+[dependencies.windows-sys]
+version = "0.59.0"
+features = [
+    "Win32_Devices_Properties",
+    "Win32_Devices_DeviceAndDriverInstallation"
 ]
 
 [build-dependencies]

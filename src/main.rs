@@ -4,9 +4,17 @@
 mod bluetooth;
 mod systray;
 use crate::systray::show_systray;
+use win_toast_notify::WinToastNotify;
 
 fn main() {
-    if let Err(_err) = show_systray() {
-        () // windows_toast_notify
+    if let Err(err) = show_systray() {
+        WinToastNotify::new()
+            .set_title("BlueGauge")
+            .set_messages(vec![
+                "Failed to build the system tray.",
+                &err.message(),
+            ])
+            .show()
+            .expect("Failed to show toast notification")
     }
 }

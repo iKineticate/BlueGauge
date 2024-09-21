@@ -1,0 +1,28 @@
+[package]
+name = "scalefs_windowspnp"
+version = "0.1.0"
+edition = "2021"
+repository = "https://github.com/scalefs/scalefs-windowspnp-lib-rs"
+
+[dependencies]
+libc = "0.2"
+scalefs_common = { path = "libs/scalefs_common" }
+scalefs_primitives = { path = "libs/scalefs_primitives" }
+scalefs_uuid = { path = "libs/scalefs_uuid" }
+
+[target.'cfg(target_os = "windows")'.dependencies.windows]
+version = "0.58.0"
+features = [
+    "Win32_Devices_DeviceAndDriverInstallation",
+    "Win32_Foundation",
+]
+
+[target.'cfg(target_os = "windows")'.dependencies.windows-sys]
+version = "0.59.0"
+features = [
+    "Win32_Devices_DeviceAndDriverInstallation",
+    "Win32_Devices_Properties",
+    "Win32_Foundation",
+    "Win32_System_Registry",
+    "Win32_UI_Shell_PropertiesSystem",
+]
