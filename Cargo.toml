@@ -9,7 +9,7 @@ license = "MIT"
 
 [dependencies]
 ab_glyph = { version = "0.2.32", default-features = false, features = ["std"] }  # 字体渲染
-anyhow = "1.0.100"
+anyhow = "1.0.101"
 env_logger = { version = "0.11.8", default-features = false, features = ["auto-color", "humantime"] }
 dashmap = "6.1.0"
 futures = "0.3.32"
