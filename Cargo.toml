@@ -19,7 +19,7 @@ piet-common = "0.8.0" # 图标渲染
 serde= { version = "1.0.228", features = ["derive"] }
 scopeguard = "1.2.0"
 tauri-winrt-notification = "0.7.2"
-tokio = { version = "1.49.0", features = ["macros", "rt-multi-thread", "sync", "time"] }
+tokio = { version = "1.50.0", features = ["macros", "rt-multi-thread", "sync", "time"] }
 toml = "1.0.3"
 tray-controls = "0.1.2"
 tray-icon = "0.21.3"
