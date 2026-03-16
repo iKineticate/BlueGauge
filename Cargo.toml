@@ -25,7 +25,7 @@ tray-controls = "0.1.2"
 tray-icon = "0.21.3"
 windows_pnp = { path = "libs/windows_pnp" }
 winit = "0.30.12"
-winreg = "0.55.0"
+winreg = "0.56.0"
 
 [dependencies.windows]
 version = "0.62.2"
