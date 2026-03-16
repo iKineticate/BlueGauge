@@ -63,7 +63,7 @@ features = [
 ]
 
 [build-dependencies]
-embed-resource = "3.0.6"
+embed-resource = "3.0.7"
 
 [profile.release]
 lto = "fat"
