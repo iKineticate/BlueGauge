@@ -23,7 +23,7 @@ dependencies = [
  "tokio",
  "toml 1.1.0+spec-1.1.0",
  "tray-controls",
- "tray-icon",
+ "tray-icon 0.22.0",
  "windows 0.62.2",
  "windows-sys 0.61.2",
  "windows_pnp",
@@ -2763,7 +2763,7 @@ version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9aadf6f5cc6d52fa891e65d0b9b88cf68593611d209b6d7c8979fdc65ffaaca2"
 dependencies = [
- "tray-icon",
+ "tray-icon 0.21.3",
 ]
 
 [[package]]
@@ -2783,6 +2783,27 @@ dependencies = [
  "objc2-foundation 0.3.2",
  "once_cell",
  "png 0.17.16",
+ "thiserror 2.0.12",
+ "windows-sys 0.60.2",
+]
+
+[[package]]
+name = "tray-icon"
+version = "0.22.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "93e1484378c343c5a9b291188fa58917c7184967683f8cfe4a05461986970553"
+dependencies = [
+ "crossbeam-channel",
+ "dirs",
+ "libappindicator",
+ "muda",
+ "objc2 0.6.3",
+ "objc2-app-kit 0.3.2",
+ "objc2-core-foundation",
+ "objc2-core-graphics",
+ "objc2-foundation 0.3.2",
+ "once_cell",
+ "png 0.18.0",
  "thiserror 2.0.12",
  "windows-sys 0.60.2",
 ]
