@@ -27,7 +27,7 @@ tokio = { version = "1.52.1", features = ["macros", "rt-multi-thread", "sync", "
 futures = "0.3.32"
 
 tray-controls = "0.1.2"
-tray-icon = "0.22.0"
+tray-icon = "0.22.1"
 
 tauri-winrt-notification = "0.7.2"
 
