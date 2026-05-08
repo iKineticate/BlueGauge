@@ -23,7 +23,7 @@ toml = "1.1.2"
 getset = "0.1.6" # 结构体库：方便设置和获取字段方法
 strum = { version = "0.28.0", features = ["derive"] } # 枚举库：转字符、迭代器
 
-tokio = { version = "1.52.2", features = ["macros", "rt-multi-thread", "sync", "time"] }
+tokio = { version = "1.52.3", features = ["macros", "rt-multi-thread", "sync", "time"] }
 futures = "0.3.32"
 
 tray-icon = "0.23.1"
