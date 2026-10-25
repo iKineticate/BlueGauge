@@ -8,26 +8,26 @@ repository = "https://github.com/iKineticate/BlueGauge"
 license = "MIT"
 
 [dependencies]
-anyhow = "1.0.102"
+anyhow = "1.0.104"
 
-env_logger = { version = "0.11.10", default-features = false, features = ["auto-color", "humantime"] }
-log = { version = "0.4.29", features = ["release_max_level_off"] }
+env_logger = { version = "0.11.11", default-features = false, features = ["auto-color", "humantime"] }
+log = { version = "0.4.34", features = ["release_max_level_off"] }
 
 image = { version = "0.25.10", default-features = false, features = ["ico", "png"] }
 ab_glyph = { version = "0.2.32", default-features = false, features = ["std"] }  # 字体渲染
 piet-common = "0.8.0" # 图标渲染
 
-serde= { version = "1.0.228", features = ["derive"] }
-toml = "1.1.2"
+serde= { version = "1.0.229", features = ["derive"] }
+toml = "1.1.8"
 
-getset = "0.1.6" # 结构体库：方便设置和获取字段方法
+getset = "0.1.7" # 结构体库：方便设置和获取字段方法
 strum = { version = "0.28.0", features = ["derive"] } # 枚举库：转字符、迭代器
 
-tokio = { version = "1.52.3", features = ["macros", "rt-multi-thread", "sync", "time"] }
-futures = "0.3.32"
+tokio = { version = "1.54.1", features = ["macros", "rt-multi-thread", "sync", "time"] }
+futures = "0.3.34"
 
-tray-icon = "0.23.1"
-tauri-winrt-notification = "0.7.2"
+tray-icon = "0.26.1"
+tauri-winrt-notification = "0.8.1"
 
 dashmap = "=7.0.0-rc2"
 scopeguard = "1.2.0"
@@ -72,7 +72,7 @@ features = [
 ]
 
 [build-dependencies]
-embed-resource = "3.0.9"
+embed-resource = "3.0.12"
 
 [profile.release]
 lto = "fat"

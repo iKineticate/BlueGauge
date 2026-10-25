@@ -32,7 +32,7 @@ pub fn get_startup_status() -> Result<bool> {
         .map_err(|e| anyhow!("Failed to open HKEY_CURRENT_USER\\...\\Run - {e}"))?;
 
     match run_key.get_value::<String, _>(&*EXE_NAME) {
-        Ok(value) => Ok(value == *EXE_PATH_STRING),
+        Ok(value) => Ok(value.eq_ignore_ascii_case(&*EXE_PATH_STRING)),
         Err(ref e) if e.kind() == std::io::ErrorKind::NotFound => Ok(false),
         Err(e) => Err(anyhow!("Failed to get the autostart registry key - {e}")),
     }

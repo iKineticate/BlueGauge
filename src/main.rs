@@ -104,6 +104,7 @@ impl App {
         }
 
         let mut menu_registry = MenuRegistry::new();
+
         let tray = create_tray(&mut menu_registry).expect("Failed to create tray");
 
         Self {
@@ -300,24 +301,22 @@ impl ApplicationHandler<UserEvent> for App {
                 self.tray_menu_update_polling
                     .store(false, Ordering::Relaxed);
 
-                let tray_menu = {
-                    match create_menu(&mut self.menu_registry) {
-                        Ok(tray_menu) => tray_menu,
-                        Err(e) => {
-                            notify(format!("Failed to create tray menu - {e}"));
-                            return;
-                        }
+                match create_menu(&mut self.menu_registry) {
+                    Ok(tray_menu) => {
+                        self.tray.set_menu(Some(Box::new(tray_menu)));
                     }
-                };
-
-                self.tray.set_menu(Some(Box::new(tray_menu)));
+                    Err(e) => {
+                        error!("Failed to create tray menu: {e}");
+                        notify(format!("Failed to create tray menu - {e}"));
+                    }
+                }
             }
             UserEvent::UpdateTrayTooltip => {
                 let bluetooth_tooltip_info = convert_tray_info();
                 let _ = self.tray.set_tooltip(Some(bluetooth_tooltip_info));
             }
             UserEvent::UpdateTray => {
-                // 不创建 UserEvent::ShowLowestBatteryDevice 事件，是因为 .send_event 是非阻塞的的
+                // 不创建 UserEvent::ShowLowestBatteryDevice 事件，是因为 .send_event 是非阻塞的
                 // 如果 UpdateTrayIcon 和 UpdateTrayMenu 同时发起，图标更新了但菜单可能未能及时更新
                 Self::show_lowest_battery_device();
 

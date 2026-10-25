@@ -65,38 +65,35 @@ async fn get_btc_device_from_address(address: u64) -> Result<BluetoothDevice> {
         .with_context(|| format!("Failed to find BTC device from ({address})"))
 }
 
+const MAX_RETRIES: u32 = 2;
+const RETRY_DELAY: tokio::time::Duration = tokio::time::Duration::from_secs(2);
+
+async fn fetch_pnp_info() -> Result<HashMap<u64, PnpDeviceInfo>> {
+    for attempt in 1..=MAX_RETRIES {
+        match get_pnp_devices_info(get_pnp_devices().await?).await {
+            Ok(info) => return Ok(info),
+            Err(e) if attempt < MAX_RETRIES => {
+                error!(
+                    "Failed to get PnP device information: {e}, retrying in {} seconds... (attempt {attempt}/{MAX_RETRIES})",
+                    RETRY_DELAY.as_secs()
+                );
+                tokio::time::sleep(RETRY_DELAY).await;
+            }
+            Err(e) => {
+                return Err(anyhow!(
+                    "Failed to enumerate PnP devices after {MAX_RETRIES} attempts: {e}"
+                ));
+            }
+        }
+    }
+    unreachable!("loop should always return or error")
+}
+
 pub async fn get_btc_devices_info(
     btc_devices: &[BluetoothDevice],
 ) -> Result<DashMap<u64, BluetoothInfo>> {
     // [!] 获取Pnp设备可能出错（初始化可能失败），需重试多次避开错误
-    let pnp_devices_info = {
-        const MAX_RETRIES: u32 = 2;
-        let mut attempt = 0;
-
-        loop {
-            attempt += 1;
-            let result = (async {
-                let pnp_devices = get_pnp_devices().await?;
-                get_pnp_devices_info(pnp_devices).await
-            })
-            .await;
-
-            match result {
-                Ok(info) => break info,
-                Err(e) if attempt < MAX_RETRIES => {
-                    error!(
-                        "Failed to get PnP device information: {e}, retrying in 2 seconds... (attempt {attempt}/{MAX_RETRIES})"
-                    );
-                    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-                }
-                Err(e) => {
-                    return Err(anyhow!(
-                        "Failed to enumerate PnP devices after {MAX_RETRIES} attempts: {e}"
-                    ));
-                }
-            }
-        }
-    };
+    let pnp_devices_info = fetch_pnp_info().await?;
 
     let devices_info: DashMap<u64, BluetoothInfo> = DashMap::new();
 

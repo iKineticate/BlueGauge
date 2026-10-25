@@ -78,25 +78,25 @@ impl CreateMenuItem {
 
     fn quit(&mut self, text: &str) -> MenuItem {
         let menu_item = MenuItem::with_id(MenuAction::Quit.id(), text, true, None);
-        self.0.register_normal(menu_item.kind());
+        self.0.register(menu_item.kind(), None);
         menu_item
     }
 
     fn about(&mut self, text: &str) -> MenuItem {
         let menu_item = MenuItem::with_id(MenuAction::About.id(), text, true, None);
-        self.0.register_normal(menu_item.kind());
+        self.0.register(menu_item.kind(), None);
         menu_item
     }
 
     fn restart(&mut self, text: &str) -> MenuItem {
         let menu_item = MenuItem::with_id(MenuAction::Restart.id(), text, true, None);
-        self.0.register_normal(menu_item.kind());
+        self.0.register(menu_item.kind(), None);
         menu_item
     }
 
     fn open_config(&mut self, text: &str) -> MenuItem {
         let menu_item = MenuItem::with_id(MenuAction::OpenConfig.id(), text, true, None);
-        self.0.register_normal(menu_item.kind());
+        self.0.register(menu_item.kind(), None);
         menu_item
     }
 
@@ -104,13 +104,13 @@ impl CreateMenuItem {
         let should_startup = get_startup_status()?;
         let check_menu_item =
             CheckMenuItem::with_id(MenuAction::Startup.id(), text, true, should_startup, None);
-        self.0.register_normal(check_menu_item.kind());
+        self.0.register(check_menu_item.kind(), None);
         Ok(check_menu_item)
     }
 
     fn refresh(&mut self, text: &str) -> MenuItem {
         let menu_item = MenuItem::with_id(MenuAction::Refresh.id(), text, true, None);
-        self.0.register_normal(menu_item.kind());
+        self.0.register(menu_item.kind(), None);
         menu_item
     }
 
@@ -253,7 +253,7 @@ impl CreateMenuItem {
         .for_each(|(menu_id, text, checked)| {
             let menu = CheckMenuItem::with_id(menu_id, text, true, checked, None);
             self.0
-                .register_checkbox(menu.kind(), MenuGroup::CheckBoxTrayTooltip);
+                .register(menu.kind(), Some(MenuGroup::CheckBoxTrayTooltip));
             menus.push(menu);
         });
 
@@ -334,7 +334,7 @@ impl CreateMenuItem {
         .for_each(|(menu_id, text, checked)| {
             let menu = CheckMenuItem::with_id(menu_id, text, true, checked, None);
             self.0
-                .register_checkbox(menu.kind(), MenuGroup::CheckBoxNotify);
+                .register(menu.kind(), Some(MenuGroup::CheckBoxNotify));
             menus.push(menu);
         });
 
@@ -354,7 +354,7 @@ impl CreateMenuItem {
         let menu =
             CheckMenuItem::with_id(menu_id, LOC.set_icon_connect_color, enabled, checked, None);
 
-        self.0.register_normal(menu.kind());
+        self.0.register(menu.kind(), None);
 
         menu
     }
@@ -372,7 +372,7 @@ impl CreateMenuItem {
             None,
         );
 
-        self.0.register_normal(menu.kind());
+        self.0.register(menu.kind(), None);
 
         menu
     }

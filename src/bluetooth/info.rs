@@ -38,7 +38,8 @@ pub async fn init_bluetooth_info() -> Result<()> {
 
 #[derive(Default, Clone, PartialEq, Eq, Hash, Debug, EnumIs)]
 pub enum BluetoothType {
-    Classic(/* Instance ID */ String),
+    /// Instance ID
+    Classic(String),
     #[default]
     LowEnergy,
 }

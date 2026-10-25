@@ -15,8 +15,7 @@ pub fn handle_menu_event(return_menu_meta: &MenuItemMeta<MenuGroup>) -> Result<(
     let return_menu_group = return_menu_meta.group();
     let return_menu_kind = return_menu_meta.kind();
     let return_menu_id = return_menu_kind.id();
-
-    let menu_action = match MenuAction::from_str(return_menu_id.as_ref()) {
+    let return_menu_action = match MenuAction::from_str(return_menu_id.as_ref()) {
         Ok(m) => m,
         Err(e) => {
             if matches!(return_menu_group, Some(MenuGroup::RadioDevice)) {
@@ -34,7 +33,7 @@ pub fn handle_menu_event(return_menu_meta: &MenuItemMeta<MenuGroup>) -> Result<(
     match return_menu_group {
         // 无分组的独立菜单
         None => match return_menu_kind {
-            MenuItemKind::MenuItem(_m) => match menu_action {
+            MenuItemKind::MenuItem(_m) => match return_menu_action {
                 MenuAction::Quit => proxy
                     .send_event(UserEvent::Exit)
                     .context("Failed to send 'Exit' event"),
@@ -52,12 +51,12 @@ pub fn handle_menu_event(return_menu_meta: &MenuItemMeta<MenuGroup>) -> Result<(
                     .spawn()
                     .map(|_| ())
                     .context("Failed to open config file"),
-                _ => Err(anyhow!("No match normal menu: {menu_action:?}")),
+                _ => Err(anyhow!("No match normal menu: {return_menu_action:?}")),
             },
             MenuItemKind::Check(m) => {
                 let check_state = m.is_checked();
 
-                match menu_action {
+                match return_menu_action {
                     MenuAction::Startup => set_startup(check_state),
                     MenuAction::ShowLowestBatteryDevice => {
                         config
@@ -83,16 +82,18 @@ pub fn handle_menu_event(return_menu_meta: &MenuItemMeta<MenuGroup>) -> Result<(
                             .send_event(UserEvent::UpdateTrayIcon)
                             .context("Failed to send 'Update Tray Icon' event")
                     }
-                    _ => Err(anyhow!("No match single check menu: {menu_action:?}")),
+                    _ => Err(anyhow!(
+                        "No match single check menu: {return_menu_action:?}"
+                    )),
                 }
             }
-            _ => Err(anyhow!("Unsupported menu kind: {menu_action:?}")),
+            _ => Err(anyhow!("Unsupported menu kind: {return_menu_action:?}")),
         },
         // 有分组的菜单（Radio、CheckBox）
         Some(group) => {
             let return_menu = return_menu_kind
                 .as_check_menuitem()
-                .ok_or_else(|| anyhow!("Menu is not a check menu: {menu_action:?}"))?;
+                .ok_or_else(|| anyhow!("Menu is not a check menu: {return_menu_action:?}"))?;
 
             let return_menu_state = return_menu.is_checked();
 
@@ -101,7 +102,7 @@ pub fn handle_menu_event(return_menu_meta: &MenuItemMeta<MenuGroup>) -> Result<(
                 MenuGroup::CheckBoxNotify => {
                     let notify_options = &mut config.notify_options;
 
-                    match menu_action {
+                    match return_menu_action {
                         MenuAction::NotifyDeviceChangeDisconnection => {
                             notify_options.set_disconnection(return_menu_state);
                         }
@@ -117,7 +118,9 @@ pub fn handle_menu_event(return_menu_meta: &MenuItemMeta<MenuGroup>) -> Result<(
                         MenuAction::NotifyDeviceStayOnScreen => {
                             notify_options.set_stay_on_screen(return_menu_state);
                         }
-                        _ => return Err(anyhow!("No match set notify menu: {menu_action:?}")),
+                        _ => {
+                            return Err(anyhow!("No match set notify menu: {return_menu_action:?}"));
+                        }
                     }
 
                     config.save_toml();
@@ -127,7 +130,7 @@ pub fn handle_menu_event(return_menu_meta: &MenuItemMeta<MenuGroup>) -> Result<(
                 MenuGroup::CheckBoxTrayTooltip => {
                     let tooltip_options = &mut config.tray_options.tooltip_options;
 
-                    match menu_action {
+                    match return_menu_action {
                         MenuAction::TrayTooltipShowDisconnected => {
                             tooltip_options.set_show_disconnected(return_menu_state);
                         }
@@ -138,12 +141,13 @@ pub fn handle_menu_event(return_menu_meta: &MenuItemMeta<MenuGroup>) -> Result<(
                             tooltip_options.set_prefix_battery(return_menu_state);
                         }
                         _ => {
-                            return Err(anyhow!("No match set tray tooltip menu: {menu_action:?}"));
+                            return Err(anyhow!(
+                                "No match set tray tooltip menu: {return_menu_action:?}"
+                            ));
                         }
                     }
 
                     config.save_toml();
-
                     drop(config);
 
                     proxy
@@ -177,7 +181,6 @@ pub fn handle_menu_event(return_menu_meta: &MenuItemMeta<MenuGroup>) -> Result<(
                     }
 
                     config.save_toml();
-
                     drop(config);
 
                     proxy
@@ -195,22 +198,13 @@ pub fn handle_menu_event(return_menu_meta: &MenuItemMeta<MenuGroup>) -> Result<(
                     };
 
                     config.save_toml();
-
                     drop(config);
 
-                    // 更新托盘是因为某些设备低于
                     proxy
                         .send_event(UserEvent::UpdateTrayIcon)
                         .context("Failed to send 'Update Tray' event")
                 }
                 MenuGroup::RadioTrayIconStyle => {
-                    let Ok(select_menu_action) = MenuAction::from_str(return_menu_id.as_ref())
-                    else {
-                        return Err(anyhow!(
-                            "No match set tray icon style menu: {return_menu_id:?}"
-                        ));
-                    };
-
                     let tray_icon_style = &config.tray_options.tray_icon_style;
 
                     let Some(address) = tray_icon_style.get_address() else {
@@ -220,7 +214,7 @@ pub fn handle_menu_event(return_menu_meta: &MenuItemMeta<MenuGroup>) -> Result<(
 
                     let color_scheme = tray_icon_style.get_theme();
 
-                    match select_menu_action {
+                    match return_menu_action {
                         MenuAction::TrayIconStyleApp => {
                             // 取消勾选所有设备菜单，取消显示最低电量设备选项
                             config.tray_options.set_show_lowest_battery_device(false);
@@ -252,7 +246,6 @@ pub fn handle_menu_event(return_menu_meta: &MenuItemMeta<MenuGroup>) -> Result<(
                     }
 
                     config.save_toml();
-
                     drop(config);
 
                     proxy
