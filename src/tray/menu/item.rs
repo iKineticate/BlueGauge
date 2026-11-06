@@ -143,7 +143,7 @@ impl CreateMenuItem {
                 let name = config.device_aliases.get(&info.name).unwrap_or(&info.name);
                 let text = format!(
                     "{} - {name} - {}%",
-                    if info.status { '♾' } else { '🚫' },
+                    if info.status { '⚫' } else { '⚪' },
                     info.battery
                 );
                 let menu = CheckMenuItem::with_id(
@@ -449,6 +449,7 @@ pub fn create_menu(menu_manager: &mut MenuRegistry<MenuGroup>) -> Result<Menu> {
     *menu_manager = create_menu_item.0;
 
     let tray_menu = Menu::new();
+
     tray_menu
         .prepend_items(&menu_devices)
         .context("Failed to prepend 'Bluetooth Items' to Tray Menu")?;
