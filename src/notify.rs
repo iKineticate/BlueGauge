@@ -1,8 +1,8 @@
 use crate::{config::CONFIG, language::LOC};
 
-use std::collections::HashSet;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
+use dashmap::DashSet;
 use tauri_winrt_notification::{Duration, Result, Scenario, Sound, Toast};
 
 // HKEY_CLASSES_ROOT\AppUserModelId\Windows.SystemToast.BthQuickPair
@@ -44,7 +44,7 @@ pub enum NotifyEvent {
 }
 
 impl NotifyEvent {
-    pub fn send(&self, notifyed_devices: Arc<Mutex<HashSet<u64>>>) {
+    pub fn send(&self, notifyed_devices: Arc<DashSet<u64>>) {
         let config = CONFIG.read().unwrap();
         let notify = if config.notify_options.stay_on_screen() {
             notify_stay
@@ -63,12 +63,12 @@ impl NotifyEvent {
                 let diff = current_battery - low_threshold;
 
                 if diff <= 0 {
-                    if notifyed_devices.lock().unwrap().insert(*address) {
+                    if notifyed_devices.insert(*address) {
                         let message = format!("{name}: {} {battery}", LOC.bluetooth_battery_below);
                         notify(message);
                     }
                 } else if diff > 10 {
-                    notifyed_devices.lock().unwrap().remove(address);
+                    notifyed_devices.remove(address);
                 }
                 // else {
                 //   // 电量在 (low_threshold, low_threshold + 10] 范围内：
