@@ -1,5 +1,6 @@
 use super::info::{BT_INFO_MAP, BluetoothInfo, BluetoothType};
-use crate::{PROXY, UserEvent, notify::NotifyEvent, util::to_wide};
+use super::pnp_battery::{PnpDeviceInfo, enumerate_bt_batteries, read_bt_battery_by_instance_id};
+use crate::{PROXY, UserEvent, notify::NotifyEvent};
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -8,7 +9,6 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use anyhow::{Context, Result, anyhow};
 use dashmap::DashMap;
 use futures::StreamExt;
-use log::{error, info, warn};
 use tokio::sync::{Mutex, mpsc::Sender};
 use windows::{
     Devices::{
@@ -17,29 +17,9 @@ use windows::{
     },
     Foundation::TypedEventHandler,
 };
-use windows_pnp::{PnpDeviceNodeInfo, PnpDevicePropertyValue, PnpEnumerator, PnpFilter};
-use windows_sys::{
-    Wdk::Devices::Bluetooth::DEVPKEY_Bluetooth_DeviceAddress,
-    Win32::Devices::{
-        DeviceAndDriverInstallation::{
-            CM_Get_DevNode_PropertyW, CM_LOCATE_DEVNODE_NORMAL, CM_Locate_DevNodeW, CONFIGRET,
-            CR_SUCCESS, GUID_DEVCLASS_SYSTEM,
-        },
-        Properties::DEVPROP_TYPE_BYTE,
-    },
-};
 
-const DEVPKEY_BLUETOOTH_BATTERY: windows_sys::Win32::Foundation::DEVPROPKEY =
-    windows_sys::Win32::Foundation::DEVPROPKEY {
-        fmtid: windows_sys::core::GUID::from_u128(0x104EA319_6EE2_4701_BD47_8DDBF425BBE5),
-        pid: 2,
-    };
-const BT_INSTANCE_ID: &str = "BTHENUM\\";
-
-pub struct PnpDeviceInfo {
-    pub battery: u8,
-    pub instance_id: String,
-}
+const MAX_RETRIES: u32 = 2;
+const RETRY_DELAY: tokio::time::Duration = tokio::time::Duration::from_secs(1);
 
 pub async fn find_btc_devices() -> Result<Vec<BluetoothDevice>> {
     let btc_aqs_filter = BluetoothDevice::GetDeviceSelectorFromPairingState(true)?;
@@ -59,21 +39,13 @@ pub async fn find_btc_devices() -> Result<Vec<BluetoothDevice>> {
     Ok(btc_devices)
 }
 
-async fn get_btc_device_from_address(address: u64) -> Result<BluetoothDevice> {
-    BluetoothDevice::FromBluetoothAddressAsync(address)?
-        .await
-        .with_context(|| format!("Failed to find BTC device from ({address})"))
-}
-
-const MAX_RETRIES: u32 = 2;
-const RETRY_DELAY: tokio::time::Duration = tokio::time::Duration::from_secs(2);
-
-async fn fetch_pnp_info() -> Result<HashMap<u64, PnpDeviceInfo>> {
+pub async fn fetch_pnp_info() -> Result<HashMap<u64, PnpDeviceInfo>> {
+    // 获取Pnp设备可能出错（初始化可能失败），需重试多次避开错误
     for attempt in 1..=MAX_RETRIES {
-        match get_pnp_devices_info(get_pnp_devices().await?).await {
+        match tokio::task::spawn_blocking(enumerate_bt_batteries).await? {
             Ok(info) => return Ok(info),
             Err(e) if attempt < MAX_RETRIES => {
-                error!(
+                log::error!(
                     "Failed to get PnP device information: {e}, retrying in {} seconds... (attempt {attempt}/{MAX_RETRIES})",
                     RETRY_DELAY.as_secs()
                 );
@@ -87,26 +59,6 @@ async fn fetch_pnp_info() -> Result<HashMap<u64, PnpDeviceInfo>> {
         }
     }
     unreachable!("loop should always return or error")
-}
-
-pub async fn get_btc_devices_info(
-    btc_devices: &[BluetoothDevice],
-) -> Result<DashMap<u64, BluetoothInfo>> {
-    // [!] 获取Pnp设备可能出错（初始化可能失败），需重试多次避开错误
-    let pnp_devices_info = fetch_pnp_info().await?;
-
-    let devices_info: DashMap<u64, BluetoothInfo> = DashMap::new();
-
-    btc_devices.iter().for_each(|btc_device| {
-        match process_btc_device(btc_device, &pnp_devices_info) {
-            Ok(i) => {
-                devices_info.insert(i.address, i);
-            }
-            Err(e) => warn!("{e}"),
-        };
-    });
-
-    Ok(devices_info)
 }
 
 fn process_btc_device(
@@ -133,140 +85,23 @@ fn process_btc_device(
     })
 }
 
-pub async fn get_btc_info_device_frome_address(
-    name: String,
-    address: u64,
-    status: bool,
-) -> Result<BluetoothInfo> {
-    let btc_address_bytes = format!("{address:012X}");
+pub async fn get_btc_devices_info(
+    btc_devices: &[BluetoothDevice],
+) -> Result<DashMap<u64, BluetoothInfo>> {
+    let pnp_devices_info = fetch_pnp_info().await?;
 
-    let pnp_device_node_info = tokio::task::spawn_blocking(move || {
-        PnpEnumerator::enumerate_present_devices_and_filter_by_device_setup_class(
-            GUID_DEVCLASS_SYSTEM,
-            PnpFilter::Contains(&[BT_INSTANCE_ID.to_owned(), btc_address_bytes]),
-        )
-        .map_err(|e| anyhow!("Failed to enumerate pnp device ({address}) - {e:?}"))
-    })
-    .await??;
+    let devices_info: DashMap<u64, BluetoothInfo> = DashMap::new();
 
-    if pnp_device_node_info.is_empty() {
-        return Err(anyhow!("No enumeration to PNP device ({address:012X})"));
-    }
-
-    let pnp_device_info = get_pnp_devices_info(pnp_device_node_info)
-        .await
-        .with_context(|| "Failed to get pnp device info")?
-        .remove(&address)
-        .ok_or_else(|| anyhow!("No matching BTC info in pnp device info"))?;
-
-    Ok(BluetoothInfo {
-        name,
-        battery: pnp_device_info.battery,
-        status,
-        address,
-        r#type: BluetoothType::Classic(pnp_device_info.instance_id),
-    })
-}
-
-async fn get_pnp_devices() -> Result<Vec<PnpDeviceNodeInfo>> {
-    tokio::task::spawn_blocking(move || {
-        PnpEnumerator::enumerate_present_devices_and_filter_by_device_setup_class(
-            GUID_DEVCLASS_SYSTEM,
-            PnpFilter::Contains(&[BT_INSTANCE_ID.to_owned()]),
-        )
-        .map_err(|e| anyhow!("Failed to enumerate pnp devices - {e:?}"))
-    })
-    .await?
-}
-
-async fn get_pnp_devices_info(
-    pnp_devices_node_info: Vec<PnpDeviceNodeInfo>,
-) -> Result<HashMap<u64, PnpDeviceInfo>> {
-    let mut pnp_devices_info: HashMap<u64, PnpDeviceInfo> = HashMap::new();
-
-    for pnp_device_node_info in pnp_devices_node_info.into_iter() {
-        let Some(mut props) = pnp_device_node_info.device_instance_properties else {
-            continue;
+    btc_devices.iter().for_each(|btc_device| {
+        match process_btc_device(btc_device, &pnp_devices_info) {
+            Ok(i) => {
+                devices_info.insert(i.address, i);
+            }
+            Err(e) => log::warn!("{e}"),
         };
+    });
 
-        let Some(battery) = props
-            .remove(&DEVPKEY_BLUETOOTH_BATTERY.into())
-            .and_then(|value| match value {
-                PnpDevicePropertyValue::Byte(v) => Some(v),
-                _ => None,
-            })
-        else {
-            continue;
-        };
-
-        let Some(address) = props
-            .remove(&DEVPKEY_Bluetooth_DeviceAddress.into())
-            .and_then(|value| match value {
-                PnpDevicePropertyValue::String(v) => u64::from_str_radix(&v, 16).ok(),
-                _ => None,
-            })
-        else {
-            continue;
-        };
-
-        pnp_devices_info.insert(
-            address,
-            PnpDeviceInfo {
-                battery,
-                instance_id: pnp_device_node_info.device_instance_id,
-            },
-        );
-    }
-
-    Ok(pnp_devices_info)
-}
-
-trait CfgRetExt {
-    fn to_result(self) -> Result<(), CONFIGRET>;
-}
-
-impl CfgRetExt for CONFIGRET {
-    fn to_result(self) -> Result<(), CONFIGRET> {
-        (self == CR_SUCCESS).then_some(()).ok_or(self)
-    }
-}
-
-/// 没法用 `CM_Register_Notification`，因为 `CM_NOTIFY_ACTION`不支持Pnp设备的属性变化(可能仅支持连接和断开)
-/// https://learn.microsoft.com/zh-cn/windows/win32/api/cfgmgr32/nf-cfgmgr32-cm_register_notification
-/// https://learn.microsoft.com/zh-cn/windows/win32/api/cfgmgr32/ne-cfgmgr32-cm_notify_action
-fn read_pnp_device_battery_from_instance_id(instance_id: String) -> Option<u8> {
-    unsafe {
-        let utf16 = to_wide(&instance_id);
-
-        // Find devnode
-        let mut devnode = 0u32;
-        // https://learn.microsoft.com/zh-cn/windows/win32/api/cfgmgr32/nf-cfgmgr32-cm_locate_devnodew
-        CM_Locate_DevNodeW(&mut devnode, utf16.as_ptr() as _, CM_LOCATE_DEVNODE_NORMAL)
-            .to_result()
-            .inspect_err(|e| {
-                error!("Failed to retrieved device instance handle: [{instance_id}] - {e}")
-            })
-            .ok()?;
-
-        let mut battery: u8 = 0;
-        let mut size = std::mem::size_of::<u32>() as u32;
-        let mut prop_type = DEVPROP_TYPE_BYTE;
-
-        // https://learn.microsoft.com/zh-cn/windows/win32/api/cfgmgr32/nf-cfgmgr32-cm_get_devnode_propertyw
-        CM_Get_DevNode_PropertyW(
-            devnode,
-            &DEVPKEY_BLUETOOTH_BATTERY,
-            &mut prop_type,
-            &mut battery as *mut _,
-            &mut size,
-            0,
-        )
-        .to_result()
-        .inspect_err(|e| error!("Failed to retrieve pnp device battery prop - {e}"))
-        .ok()?;
-
-        Some(battery)
-    }
+    Ok(devices_info)
 }
 
 pub async fn watch_btc_devices_battery(
@@ -289,29 +124,29 @@ pub async fn watch_btc_devices_battery(
     while !exit_flag.load(Ordering::Relaxed) {
         let current_generation = restart_flag.load(Ordering::Relaxed);
         if local_generation < current_generation {
-            info!("Watch BTC Batttery restart by restart flag.");
+            log::info!("Watch BTC Batttery restart by restart flag.");
             local_generation = current_generation;
             original_btc_devices_info = get_btc_devices_info();
             continue;
         }
 
-        let btc_devices = futures::stream::iter(&original_btc_devices_info)
-            .filter_map(|info| async move {
+        let btc_devices: Vec<(u64, u8)> = original_btc_devices_info
+            .iter()
+            .filter_map(|info| {
                 let original_battery = info.battery;
                 info.get_btc_instance_id()
-                    .and_then(read_pnp_device_battery_from_instance_id)
+                    .and_then(|id| read_bt_battery_by_instance_id(&id))
                     .filter(|current_battery| original_battery.ne(current_battery))
                     .map(|battery| (info.address, battery))
             })
-            .collect::<Vec<_>>()
-            .await;
+            .collect();
 
         let mut need_update = false;
         for (address, new_battery) in btc_devices.into_iter() {
             if let Some(mut info) = BT_INFO_MAP.get_mut(&address) {
                 let name = info.name.clone();
                 let old_battery = info.battery;
-                info!("BTC [{name}]: Battery {old_battery} -> {new_battery}");
+                log::info!("BTC [{name}]: Battery {old_battery} -> {new_battery}");
                 need_update = true;
                 info.battery = new_battery;
                 let _ = proxy.send_event(UserEvent::Notify(NotifyEvent::LowBattery(
@@ -348,7 +183,7 @@ async fn watch_btc_device_status(
                     let status = btc.ConnectionStatus()? == BluetoothConnectionStatus::Connected;
                     let _ = tx_status
                         .try_send((btc_address, status))
-                        .inspect_err(|e| error!("Failed to send BTC status update: {e}"));
+                        .inspect_err(|e| log::error!("Failed to send BTC status update: {e}"));
                 }
                 Ok(())
             });
@@ -363,6 +198,12 @@ fn get_btc_devices_address<C: FromIterator<u64>>() -> C {
         .iter()
         .filter_map(|entry| entry.is_btc().then_some(*entry.key()))
         .collect()
+}
+
+async fn get_btc_device_from_address(address: u64) -> Result<BluetoothDevice> {
+    BluetoothDevice::FromBluetoothAddressAsync(address)?
+        .await
+        .with_context(|| format!("Failed to find BTC device from ({address})"))
 }
 
 pub async fn watch_btc_devices_status_async(
@@ -411,7 +252,7 @@ pub async fn watch_btc_devices_status_async(
 
                 if let Some(mut update_device) = BT_INFO_MAP.get_mut(&address)
                     && update_device.status != status {
-                        info!("BTC [{}]: Status -> {status}", update_device.name);
+                        log::info!("BTC [{}]: Status -> {status}", update_device.name);
                         let notify_event = if status {
                             NotifyEvent::Reconnect(update_device.name.clone())
                         } else {
@@ -427,7 +268,7 @@ pub async fn watch_btc_devices_status_async(
                 while !exit_flag.load(Ordering::Relaxed) {
                     let current_generation = restart_flag.load(Ordering::Relaxed);
                     if local_generation < current_generation {
-                        info!("Watch BTC Status restart by restart flag.");
+                        log::info!("Watch BTC Status restart by restart flag.");
                         local_generation = current_generation;
 
                         let current_btc_devices_address: HashSet<_> = get_btc_devices_address();
@@ -454,7 +295,7 @@ pub async fn watch_btc_devices_status_async(
                             let Ok(btc_device) = get_btc_device_from_address(added_device_address).await else {
                                 // 移除错误设备
                                 BT_INFO_MAP.remove(&added_device_address);
-                                warn!("Failed to get added BTC Device from address");
+                                log::warn!("Failed to get added BTC Device from address");
                                 continue;
                             };
 
@@ -468,7 +309,7 @@ pub async fn watch_btc_devices_status_async(
                                 Err(e) => {
                                     // 移除错误设备
                                     BT_INFO_MAP.remove(&added_device_address);
-                                    warn!("BTC [{name}]: Failed to watch added BTC Device - {e}");
+                                    log::warn!("BTC [{name}]: Failed to watch added BTC Device - {e}");
                                 }
                             }
                         }
@@ -477,7 +318,7 @@ pub async fn watch_btc_devices_status_async(
                     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
                 }
 
-                info!("Watch BTC Status was cancelled by exit flag.");
+                log::info!("Watch BTC Status was cancelled by exit flag.");
             } => return Ok(()),
         }
     }

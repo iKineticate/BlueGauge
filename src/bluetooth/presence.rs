@@ -1,6 +1,6 @@
 use super::{
     ble::process_ble_device,
-    btc::get_btc_info_device_frome_address,
+    btc::fetch_pnp_info,
     info::{BT_INFO_MAP, BluetoothInfo, BluetoothType},
 };
 use crate::{PROXY, UserEvent, notify::NotifyEvent};
@@ -57,14 +57,26 @@ async fn check_presence_async(
             } else {
                 let btc_device = BluetoothDevice::FromIdAsync(&id)?.await?;
                 let process_btc_device = async |btc_device: &BluetoothDevice| {
-                    let btc_name = btc_device.Name()?.to_string();
-                    let btc_address = btc_device.BluetoothAddress()?;
-                    let btc_status =
+                    let name = btc_device.Name()?.to_string();
+                    let address = btc_device.BluetoothAddress()?;
+                    let status =
                         btc_device.ConnectionStatus()? == BluetoothConnectionStatus::Connected;
-                    // NOTE: 等待Pnp设备初始化后方可获取经典蓝牙信息
-                    tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
-                    get_btc_info_device_frome_address(btc_name.clone(), btc_address, btc_status)
-                        .await
+
+                    let mut pnp_devices_info = fetch_pnp_info().await?;
+                    let (battery, instance_id) = pnp_devices_info
+                        .remove(&address)
+                        .map(|i| (i.battery, i.instance_id))
+                        .ok_or_else(|| {
+                            anyhow!("No matching PnP BT device for address {address:012X}")
+                        })?;
+
+                    Ok::<BluetoothInfo, anyhow::Error>(BluetoothInfo {
+                        name,
+                        battery,
+                        status,
+                        address,
+                        r#type: BluetoothType::Classic(instance_id),
+                    })
                 };
                 match process_btc_device(&btc_device).await {
                     Ok(btc_info) => {

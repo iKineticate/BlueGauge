@@ -9,29 +9,27 @@ license = "MIT"
 
 [dependencies]
 anyhow = "1.0.104"
-
 env_logger = { version = "0.11.11", default-features = false, features = ["auto-color", "humantime"] }
-log = { version = "0.4.34", features = ["release_max_level_off"] }
+log = { version = "0.4.35", features = ["release_max_level_off"] }
+
+getset = "0.1.7" # 结构体库：方便设置和获取字段方法
+strum = { version = "0.28.0", features = ["derive"] } # 枚举库：转字符、迭代器
+dashmap = "=7.0.0-rc2"
+scopeguard = "1.2.0"
+
+serde= { version = "1.0.229", features = ["derive"] }
+toml = "1.2.1"
+
+tokio = { version = "1.54.1", features = ["macros", "rt-multi-thread", "sync", "time"] }
+futures = "0.3.34"
 
 image = { version = "0.25.10", default-features = false, features = ["ico", "png"] }
 ab_glyph = { version = "0.2.32", default-features = false, features = ["std"] }  # 字体渲染
 piet-common = "0.8.0" # 图标渲染
 
-serde= { version = "1.0.229", features = ["derive"] }
-toml = "1.1.8"
-
-getset = "0.1.7" # 结构体库：方便设置和获取字段方法
-strum = { version = "0.28.0", features = ["derive"] } # 枚举库：转字符、迭代器
-
-tokio = { version = "1.54.1", features = ["macros", "rt-multi-thread", "sync", "time"] }
-futures = "0.3.34"
-
 tray-icon = "0.26.1"
 tauri-winrt-notification = "0.8.1"
 
-dashmap = "=7.0.0-rc2"
-scopeguard = "1.2.0"
-windows_pnp = { path = "libs/windows_pnp" }
 winit = { version = "0.30.13", default-features = false } # "rwh_06", "bytemuck"
 winreg = "0.56.0"
 
@@ -43,6 +41,9 @@ features = [
     "Devices_Enumeration",
     "Foundation_Collections",
     "Storage_Streams",
+    "Win32_Devices_DeviceAndDriverInstallation",
+    "Win32_Devices_Properties",
+    "Win32_Foundation",
     "Win32_Globalization",
     "Win32_Graphics_DirectWrite",
     "Win32_Security",
@@ -52,23 +53,6 @@ features = [
     "Win32_UI_Controls",
     "Win32_UI_Shell",
     "Win32_UI_WindowsAndMessaging",
-]
-
-[dependencies.windows-sys]
-version = "0.61.2"
-features = [
-    "Win32_Devices_Properties",
-    "Win32_Devices_DeviceAndDriverInstallation",
-    "Wdk_Devices_Bluetooth",
-]
-
-[dev-dependencies.windows]
-version = "0.62.2"
-features = [
-    "Win32_Devices_Bluetooth",
-    "Devices_Bluetooth_Rfcomm",
-    "Networking_Sockets",
-    "Win32_Devices_Properties"
 ]
 
 [build-dependencies]

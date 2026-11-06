@@ -19,7 +19,7 @@ use crate::bluetooth::{
 use crate::config::{CONFIG, EXE_PATH, TrayIconStyle};
 use crate::notify::{NotifyEvent, notify};
 use crate::single_instance::SingleInstance;
-use crate::theme::{SystemTheme, ThemeWatcher};
+use crate::theme::ThemeWatcher;
 use crate::tray::{
     convert_tray_info, create_tray, create_tray_icon,
     menu::{
@@ -30,15 +30,14 @@ use crate::tray::{
     },
 };
 
-use std::collections::HashSet;
 use std::ffi::OsString;
 use std::process::Command;
+use std::sync::Arc;
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, RwLock};
 
 use anyhow::anyhow;
-use log::{error, info};
+use dashmap::DashSet;
 use tray_icon::{TrayIcon, menu::MenuEvent};
 use windows::Win32::UI::WindowsAndMessaging::{
     DispatchMessageW, PM_REMOVE, PeekMessageW, TranslateMessage,
@@ -57,7 +56,7 @@ async fn main() -> anyhow::Result<()> {
     let _single_instance = SingleInstance::new()?;
 
     std::panic::set_hook(Box::new(|info| {
-        error!("⚠️ Panic: {info}");
+        log::error!("⚠️ Panic: {info}");
         notify(format!("⚠️ Panic: {info}"));
     }));
 
@@ -77,27 +76,26 @@ async fn main() -> anyhow::Result<()> {
             .expect("Failed to send MenuEvent");
     }));
 
-    let mut app = App::new().await;
+    let mut app = App::new();
     event_loop.run_app(&mut app)?;
 
     Ok(())
 }
 
 struct App {
-    bluetooth_watcher: Option<Watcher>,
     exit_threads: Arc<AtomicBool>,
+    bluetooth_watcher: Option<Watcher>,
     /// 存储已经通知过的低电量设备（地址），避免再次通知
-    notified_devices: Arc<Mutex<HashSet</* Address */ u64>>>,
-    menu_registry: MenuRegistry<MenuGroup>,
-    system_theme: Arc<RwLock<SystemTheme>>,
-    theme_watcher: Option<ThemeWatcher>,
+    notified_devices: Arc<DashSet</* Address */ u64>>,
     tray: TrayIcon,
+    menu_registry: MenuRegistry<MenuGroup>,
     /// 托盘菜单更新轮询标志，避免在菜单打开时强制刷新导致体验不佳
     tray_menu_update_polling: Arc<AtomicBool>,
+    theme_watcher: Option<ThemeWatcher>,
 }
 
 impl App {
-    async fn new() -> Self {
+    fn new() -> Self {
         {
             Self::send_low_battery_notification();
             Self::show_lowest_battery_device();
@@ -108,14 +106,13 @@ impl App {
         let tray = create_tray(&mut menu_registry).expect("Failed to create tray");
 
         Self {
-            bluetooth_watcher: None,
             exit_threads: Arc::new(AtomicBool::new(false)),
-            notified_devices: Arc::new(Mutex::new(HashSet::new())),
-            menu_registry,
-            system_theme: Arc::new(RwLock::new(SystemTheme::get())),
-            theme_watcher: None,
+            bluetooth_watcher: None,
+            notified_devices: Arc::new(DashSet::new()),
             tray,
+            menu_registry,
             tray_menu_update_polling: Arc::new(AtomicBool::new(false)),
+            theme_watcher: None,
         }
     }
 
@@ -146,7 +143,7 @@ impl App {
                 .min_by_key(|entry| entry.battery)
         {
             let (address, info) = entry.pair();
-            info!("Show Lowest Battery Device: {}", info.name);
+            log::info!("Show Lowest Battery Device: {}", info.name);
 
             let mut config = CONFIG.write().unwrap();
 
@@ -193,8 +190,7 @@ impl App {
 
     fn start_watch_theme(&mut self) {
         let exit_threads = Arc::clone(&self.exit_threads);
-        let system_theme = Arc::clone(&self.system_theme);
-        let mut theme_watcher = ThemeWatcher::new(exit_threads, system_theme);
+        let mut theme_watcher = ThemeWatcher::new(exit_threads);
         theme_watcher.start();
         self.theme_watcher = Some(theme_watcher);
     }
@@ -264,7 +260,7 @@ impl ApplicationHandler<UserEvent> for App {
                     .map_err(|e| anyhow!("{e}"))
                     .and_then(handle_menu_event)
                 {
-                    error!("Failed to handle menu event: {e}");
+                    log::error!("Failed to handle menu event: {e}");
                 }
             }
             UserEvent::Notify(notify_event) => notify_event.send(self.notified_devices.clone()),
@@ -282,7 +278,7 @@ impl ApplicationHandler<UserEvent> for App {
 
                 // 如果托盘菜单正在显示，则推迟更新，避免菜单被强制关闭刷新影响体验
                 if self.tray.is_menu_showing().unwrap_or_default() {
-                    info!("Tray menu is showing, deferring update");
+                    log::info!("Tray menu is showing, deferring update");
 
                     if !self.tray_menu_update_polling.swap(true, Ordering::Relaxed) {
                         let tray_menu_update_polling = self.tray_menu_update_polling.clone();
@@ -306,7 +302,7 @@ impl ApplicationHandler<UserEvent> for App {
                         self.tray.set_menu(Some(Box::new(tray_menu)));
                     }
                     Err(e) => {
-                        error!("Failed to create tray menu: {e}");
+                        log::error!("Failed to create tray menu: {e}");
                         notify(format!("Failed to create tray menu - {e}"));
                     }
                 }

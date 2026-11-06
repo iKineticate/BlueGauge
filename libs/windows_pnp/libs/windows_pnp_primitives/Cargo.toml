@@ -1,7 +1,0 @@
-[package]
-name = "windows_pnp_primitives"
-version = "0.1.0"
-edition = "2024"
-repository = "https://github.com/scalefs/scalefs-primitives-lib-rs"
-
-[dependencies]
