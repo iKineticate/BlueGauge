@@ -1,12 +1,10 @@
 use crate::{PROXY, UserEvent, util::to_wide};
 
-use std::sync::{
-    Arc, RwLock,
-    atomic::{AtomicBool, Ordering},
-};
+use std::sync::Arc;
+use std::sync::RwLock;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use image::Rgba;
-use log::{error, info};
 use windows::{
     Win32::{
         Foundation::{CloseHandle, HANDLE, WAIT_EVENT, WAIT_FAILED, WAIT_OBJECT_0},
@@ -79,9 +77,11 @@ pub struct ThemeWatcher {
 }
 
 impl ThemeWatcher {
-    pub fn new(exit_threads: Arc<AtomicBool>, system_theme: Arc<RwLock<SystemTheme>>) -> Self {
+    pub fn new(exit_threads: Arc<AtomicBool>) -> Self {
         let shut_down_handle =
             unsafe { CreateEventW(None, true, false, None).expect("Shutdown event create failed") };
+
+        let system_theme = Arc::new(RwLock::new(SystemTheme::get()));
 
         Self {
             exit_threads,
@@ -92,7 +92,7 @@ impl ThemeWatcher {
     }
 
     pub fn stop(&mut self) {
-        info!("Stopping the watch theme thread...");
+        log::info!("Stopping the watch theme thread...");
         let _ = unsafe { SetEvent(self.shut_down_handle) };
         if let Some(handle) = self.thread_handle.take() {
             self.exit_threads.store(true, Ordering::Relaxed);
@@ -122,7 +122,7 @@ impl ThemeWatcher {
                 }
                 .ok()
                 {
-                    error!("Failed to open registry key: {e}");
+                    log::error!("Failed to open registry key: {e}");
                     return;
                 }
 
@@ -130,7 +130,7 @@ impl ThemeWatcher {
                     let registry_event = unsafe { CreateEventW(None, true, false, None) };
 
                     let Ok(watch_handle) = registry_event else {
-                        error!("Failed to create event");
+                        log::error!("Failed to create event");
                         break;
                     };
 
@@ -145,7 +145,7 @@ impl ThemeWatcher {
                     };
 
                     if status.is_err() {
-                        error!("RegNotifyChangeKeyValue failed: {}", status.0);
+                        log::error!("RegNotifyChangeKeyValue failed: {}", status.0);
                         let _ = unsafe { CloseHandle(watch_handle) };
                         break;
                     }
@@ -166,7 +166,7 @@ impl ThemeWatcher {
                             let current_system_theme = SystemTheme::get();
 
                             if original_system_theme != current_system_theme {
-                                info!("System Theme changed = {current_system_theme:?}");
+                                log::info!("System Theme changed = {current_system_theme:?}");
 
                                 let mut system_theme = system_theme.write().unwrap();
                                 *system_theme = current_system_theme;
@@ -180,16 +180,16 @@ impl ThemeWatcher {
                         }
                         // exit
                         WAIT_EVENT(1) => {
-                            info!("Watcher theme thread has stopped");
+                            log::info!("Watcher theme thread has stopped");
                             let _ = unsafe { RegCloseKey(hkey) };
                             break;
                         }
                         WAIT_FAILED => {
-                            error!("WaitForMultipleObjects failed: {wait_event:?}");
+                            log::error!("WaitForMultipleObjects failed: {wait_event:?}");
                             break;
                         }
                         _ => {
-                            error!("WaitForMultipleObjects unexpected result: {wait_event:?}");
+                            log::error!("WaitForMultipleObjects unexpected result: {wait_event:?}");
                             break;
                         }
                     }
