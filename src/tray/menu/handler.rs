@@ -119,7 +119,9 @@ pub fn handle_menu_event(return_menu_meta: &MenuItemMeta<MenuGroup>) -> Result<(
                             notify_options.set_stay_on_screen(return_menu_state);
                         }
                         _ => {
-                            return Err(anyhow!("No match set notify menu: {return_menu_action:?}"));
+                            return Err(anyhow!(
+                                "No match set notify menu: {return_menu_action:?}"
+                            ));
                         }
                     }
 

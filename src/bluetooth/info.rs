@@ -11,7 +11,6 @@ use std::sync::LazyLock;
 
 use anyhow::{Result, anyhow};
 use dashmap::DashMap;
-use log::{info, warn};
 use strum::EnumIs;
 use windows::Devices::Bluetooth::{BluetoothDevice, BluetoothLEDevice};
 
@@ -88,7 +87,7 @@ async fn get_bluetooth_devices_info(
         (0, 0) => Err(anyhow!("No BTC and BLE devices found")),
         (0, _) => {
             let ble_devices_result = get_ble_devices_info(ble_devices).await;
-            info!("{ble_devices_result:#?}");
+            log::info!("{ble_devices_result:#?}");
 
             ble_devices_result.or_else(|e| {
                 notify(format!("Warning: Failed to get BLE devices info: {e}"));
@@ -97,7 +96,7 @@ async fn get_bluetooth_devices_info(
         }
         (_, 0) => {
             let btc_devices_result = get_btc_devices_info(btc_devices).await;
-            info!("{btc_devices_result:#?}");
+            log::info!("{btc_devices_result:#?}");
 
             btc_devices_result.or_else(|e| {
                 notify(format!("Warning: Failed to get BTC devices info: {e}"));
@@ -110,8 +109,8 @@ async fn get_bluetooth_devices_info(
 
             let (btc_result, ble_result) = tokio::join!(btc_future, ble_future);
 
-            info!("{btc_result:#?}");
-            info!("{ble_result:#?}");
+            log::info!("{btc_result:#?}");
+            log::info!("{ble_result:#?}");
 
             match (btc_result, ble_result) {
                 (Ok(btc_info), Ok(ble_info)) => {
@@ -119,11 +118,11 @@ async fn get_bluetooth_devices_info(
                     Ok(combined_info)
                 }
                 (Ok(btc_info), Err(e)) => {
-                    warn!("Failed to get BLE devices info: {e}");
+                    log::warn!("Failed to get BLE devices info: {e}");
                     Ok(btc_info)
                 }
                 (Err(e), Ok(ble_info)) => {
-                    warn!("Failed to get BTC devices info: {e}");
+                    log::warn!("Failed to get BTC devices info: {e}");
                     Ok(ble_info)
                 }
                 (Err(btc_err), Err(ble_err)) => Err(anyhow!(
